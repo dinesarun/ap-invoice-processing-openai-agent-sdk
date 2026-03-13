@@ -1,0 +1,26 @@
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./sample_invoices:/app/sample_invoices
+    env_file:
+      - .env
+    environment:
+      - SQLITE_DB_PATH=/app/data/ap_invoices.db
+      - UPLOAD_DIR=/app/data/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend

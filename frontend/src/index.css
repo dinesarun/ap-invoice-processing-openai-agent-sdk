@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+}
+
+@layer components {
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-green  { @apply badge bg-emerald-100 text-emerald-800; }
+  .badge-yellow { @apply badge bg-amber-100  text-amber-800; }
+  .badge-red    { @apply badge bg-red-100    text-red-800; }
+  .badge-blue   { @apply badge bg-blue-100   text-blue-800; }
+  .badge-gray   { @apply badge bg-slate-100  text-slate-700; }
+
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-slate-200;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium
+           rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:opacity-50
+           disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-white text-slate-700 text-sm font-medium
+           rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors;
+  }
+
+  .btn-success {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white text-sm font-medium
+           rounded-lg hover:bg-emerald-700 transition-colors;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white text-sm font-medium
+           rounded-lg hover:bg-red-700 transition-colors;
+  }
+}
+
+/* SSE timeline pulse animation */
+@keyframes pulse-ring {
+  0%   { transform: scale(0.8); opacity: 1; }
+  80%, 100% { transform: scale(1.8); opacity: 0; }
+}
+.pulse-ring {
+  animation: pulse-ring 1.2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
