@@ -6,7 +6,7 @@ does its work, then hands off to PO Matching Agent.
 """
 from agents import Agent
 
-from agents.setup import get_deployment_name
+from app_agents.setup import get_deployment_name
 from tools.vendor_lookup import vendor_lookup
 
 

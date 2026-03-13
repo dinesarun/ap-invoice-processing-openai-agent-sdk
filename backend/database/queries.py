@@ -96,14 +96,30 @@ def insert_processed_invoice(data: Dict) -> str:
             """INSERT OR REPLACE INTO processed_invoices
                (invoice_id, vendor_id, po_number, invoice_number, invoice_date,
                 total_amount, currency, extracted_fields, confidence_score,
-                status, decision_reason, agent_trace)
+                status, decision_reason, pipeline_response, agent_trace)
                VALUES (:invoice_id, :vendor_id, :po_number, :invoice_number, :invoice_date,
                        :total_amount, :currency, :extracted_fields, :confidence_score,
-                       :status, :decision_reason, :agent_trace)""",
+                       :status, :decision_reason, :pipeline_response, :agent_trace)""",
             data,
         )
         conn.commit()
     return data["invoice_id"]
+
+
+def update_pipeline_response(invoice_id: str, pipeline_response: str) -> bool:
+    """Persist the final pipeline response text for a processed invoice."""
+    if not invoice_id:
+        return False
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            """UPDATE processed_invoices
+               SET pipeline_response = ?
+               WHERE invoice_id = ?""",
+            (pipeline_response, invoice_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def get_invoice_by_id(invoice_id: str) -> Optional[Dict]:

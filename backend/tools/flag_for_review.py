@@ -64,6 +64,7 @@ def flag_for_review(
         "confidence_score": confidence_score,
         "status": "flagged_for_review",
         "decision_reason": flag_reason,
+        "pipeline_response": None,
         "agent_trace": agent_trace if isinstance(agent_trace, str) else json.dumps(agent_trace),
     }
 

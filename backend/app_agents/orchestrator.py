@@ -25,12 +25,13 @@ from typing import AsyncIterator
 
 from agents import Runner, RunConfig, handoff, InputGuardrailTripwireTriggered
 
-from agents.setup import configure_azure_client, get_deployment_name
-from agents.triage_agent import create_triage_agent
-from agents.extraction_agent import create_extraction_agent
-from agents.vendor_agent import create_vendor_agent
-from agents.po_match_agent import create_po_match_agent
-from agents.decision_agent import create_decision_agent
+from app_agents.setup import configure_azure_client, get_deployment_name
+from app_agents.triage_agent import create_triage_agent
+from app_agents.extraction_agent import create_extraction_agent
+from app_agents.vendor_agent import create_vendor_agent
+from app_agents.po_match_agent import create_po_match_agent
+from app_agents.decision_agent import create_decision_agent
+from database import queries as db_queries
 from guardrails.input_guardrail import pdf_file_guardrail
 from guardrails.output_guardrail import decision_output_guardrail
 
@@ -89,6 +90,7 @@ async def process_invoice(file_path: str) -> dict:
 
         # Extract structured trace from new_items
         trace = _extract_trace(result)
+        _persist_pipeline_response(result, result.final_output)
 
         return {
             "success": True,
@@ -206,13 +208,21 @@ async def process_invoice_streaming(file_path: str) -> AsyncIterator[str]:
                             "step": step,
                         })
 
-        # Final result
-        final_result = await result.get_final_result()
-        trace = _extract_trace(final_result)
+        # stream_events() drains the run loop and leaves the completed
+        # RunResultStreaming object populated with final_output/new_items.
+        final_output = result.final_output
+        if final_output is None and hasattr(result, "final_output_as"):
+            try:
+                final_output = result.final_output_as(str)
+            except Exception:
+                final_output = None
+
+        trace = _extract_trace(result)
+        _persist_pipeline_response(result, final_output)
 
         yield _sse({
             "event": "pipeline_complete",
-            "final_output": str(final_result.final_output)[:2000],
+            "final_output": str(final_output)[:2000],
             "trace": trace,
         })
 
@@ -274,3 +284,37 @@ def _safe_json(val) -> dict:
         return json.loads(val)
     except Exception:
         return {"raw": str(val)}
+
+
+def _extract_invoice_id(result) -> str | None:
+    """Best-effort extraction of invoice_id from tool outputs in run items."""
+    if not hasattr(result, "new_items"):
+        return None
+
+    for item in reversed(result.new_items):
+        if getattr(item, "type", None) != "tool_call_output_item":
+            continue
+
+        parsed = _safe_json(getattr(item, "output", ""))
+        invoice_id = parsed.get("invoice_id") if isinstance(parsed, dict) else None
+        if invoice_id:
+            return str(invoice_id)
+
+    return None
+
+
+def _persist_pipeline_response(result, final_output) -> None:
+    """Persist final pipeline response text to processed_invoices if possible."""
+    invoice_id = _extract_invoice_id(result)
+    if not invoice_id:
+        return
+
+    response_text = str(final_output) if final_output is not None else ""
+    if not response_text:
+        return
+
+    try:
+        db_queries.update_pipeline_response(invoice_id, response_text)
+    except Exception:
+        # Persistence failure should not break the invoice processing pipeline.
+        pass

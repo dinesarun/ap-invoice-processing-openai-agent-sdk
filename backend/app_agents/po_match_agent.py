@@ -5,7 +5,7 @@ Performs 3-way match: invoice ↔ PO ↔ (receipt, simplified here to PO only).
 """
 from agents import Agent
 
-from agents.setup import get_deployment_name
+from app_agents.setup import get_deployment_name
 from tools.po_lookup import po_lookup
 
 

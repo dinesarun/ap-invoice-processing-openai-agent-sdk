@@ -27,7 +27,7 @@ from config import settings
 from database.init_db import init_db
 from database import queries
 from database.models import ReviewResolveRequest, StatsResponse
-from agents.orchestrator import process_invoice, process_invoice_streaming
+from app_agents.orchestrator import process_invoice, process_invoice_streaming
 
 
 # ─── App setup ────────────────────────────────────────────────────────────────

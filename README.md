@@ -19,16 +19,16 @@ This app showcases all **4 core primitives** of the OpenAI Agents SDK:
 flowchart TD
     User[User Uploads Invoice PDF] --> Frontend[React + Vite Frontend]
     Frontend -->|POST /api/upload-invoice| Backend[FastAPI Backend]
-    Backend --> Guardrail[Input Guardrail\nPDF Validation]
+    Backend --> Guardrail[Input Guardrail \n PDF Validation]
     Guardrail --> Triage[Triage Agent]
     Triage --> Extraction[Extraction Agent]
-    Extraction --> OCR[LLMWhisperer OCR Tool\nor Mock OCR Fallback]
+    Extraction --> OCR [LLMWhisperer OCR Tool \n or Mock OCR Fallback]
     OCR --> Vendor[Vendor Lookup Agent]
     Vendor --> VendorDB[(vendor_master SQLite)]
     VendorDB --> POMatch[PO Matching Agent]
     POMatch --> PODB[(purchase_orders SQLite)]
     POMatch --> Decision[Decision Agent]
-    Decision --> OutputGuardrail[Output Guardrail\nDecision Validation]
+    Decision --> OutputGuardrail[Output Guardrail \n Decision Validation]
 
     OutputGuardrail -->|Approved| Approved[(processed_invoices)]
     OutputGuardrail -->|Flagged| Review[(review_queue)]
@@ -111,7 +111,7 @@ npm run dev
 # Azure OpenAI
 AZURE_OPENAI_API_KEY=your_key
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_API_VERSION=2024-08-01-preview
+AZURE_OPENAI_API_VERSION=2025-03-01-preview
 AZURE_OPENAI_DEPLOYMENT=gpt-4o
 
 # LLMWhisperer
@@ -132,6 +132,13 @@ LLMWHISPERER_BASE_URL=https://llmwhisperer-api.unstract.com/api/v2
 | `invoice_003_newvendor_unknown.pdf` | NewVendor XYZ (not in master) | ⚠️ Flagged — unknown vendor |
 | `invoice_004_global_logistics_no_po.pdf` | Global Logistics, no PO number | ⚠️ Flagged — missing PO |
 
+### Expected "Pipeline Complete — Agent Response" (Invoice 3 and 4)
+
+| File | Expected Response |
+|------|-------------------|
+| `invoice_003_newvendor_unknown.pdf` | The invoice `NV-2024-001` from vendor `NewVendor XYZ Corporation` is flagged for human review with **high** priority. Vendor is not found in vendor master, and referenced PO `PO-2024-099` is not found in the PO system. Extraction confidence is typically around **0.85**, but auto-approval is blocked due to critical vendor/PO validation failures. |
+| `invoice_004_global_logistics_no_po.pdf` | The invoice `GLI-2024-0156` from `Global Logistics Inc.` is flagged for human review with **medium** priority. No PO number is referenced on the invoice, and the closest PO comparison shows about **5.48% amount mismatch**. Vendor is active and extraction fields are valid, but manual validation is required to confirm PO linkage and approval. |
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
@@ -145,6 +152,19 @@ LLMWHISPERER_BASE_URL=https://llmwhisperer-api.unstract.com/api/v2
 | `GET` | `/api/vendors` | Vendor master list |
 | `GET` | `/api/purchase-orders` | PO list |
 | `GET` | `/api/stats` | Dashboard stats |
+
+## What Gets Stored Per Invoice
+
+Each processed invoice is persisted in `processed_invoices` with:
+
+- `status` (`approved` / `flagged_for_review` / `rejected`)
+- `decision_reason` (short reason used for decisioning)
+- `pipeline_response` (full final "Pipeline Complete — Agent Response" text)
+- `agent_trace` (structured tool/message trace)
+
+For older rows created before this field existed, `pipeline_response` is backfilled from `decision_reason`.
+
+Flagged invoices are also inserted into `review_queue` with `reason`, `priority`, and `status`.
 
 ## Key SDK Concepts in the Code
 

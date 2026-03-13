@@ -55,9 +55,16 @@ async def pdf_file_guardrail(
     else:
         text = str(input)
 
-    # Extract file path from the message
-    # Matches typical "Process this invoice PDF located at: /path/to/file.pdf"
-    path_match = re.search(r"(?:at:|path:)?\s*(/[^\s]+\.pdf)", text, re.IGNORECASE)
+    # Extract file path from the message.
+    # Supports both absolute and relative forms, e.g.:
+    #   /full/path/to/file.pdf
+    #   ./uploads/file.pdf
+    #   uploads/file.pdf
+    path_match = re.search(
+        r"(?:at:|path:)?\s*([\./A-Za-z0-9_-][^\s]*\.pdf)",
+        text,
+        re.IGNORECASE,
+    )
 
     if not path_match:
         # No file path found — let the agent handle it (might be a status query etc.)
@@ -69,7 +76,11 @@ async def pdf_file_guardrail(
             tripwire_triggered=False,
         )
 
-    file_path = path_match.group(1)
+    file_path = path_match.group(1).strip().strip('"\'').rstrip(',;:')
+
+    # Resolve relative paths against current working directory.
+    if not os.path.isabs(file_path):
+        file_path = os.path.abspath(file_path)
 
     # Check existence
     if not os.path.exists(file_path):

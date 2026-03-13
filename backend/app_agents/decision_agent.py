@@ -8,7 +8,7 @@ Also has an OUTPUT GUARDRAIL attached (see guardrails/output_guardrail.py).
 """
 from agents import Agent
 
-from agents.setup import get_deployment_name
+from app_agents.setup import get_deployment_name
 from tools.approve_invoice import approve_invoice
 from tools.flag_for_review import flag_for_review
 

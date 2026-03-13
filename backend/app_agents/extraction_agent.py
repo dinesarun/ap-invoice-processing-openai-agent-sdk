@@ -9,7 +9,7 @@ This agent demonstrates the TOOL USE primitive of the Agents SDK:
 """
 from agents import Agent
 
-from agents.setup import get_deployment_name
+from app_agents.setup import get_deployment_name
 from tools.llmwhisperer_tool import llmwhisperer_extract
 
 

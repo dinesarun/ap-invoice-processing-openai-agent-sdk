@@ -11,7 +11,7 @@ before the agent even starts processing.
 """
 from agents import Agent
 
-from agents.setup import get_deployment_name
+from app_agents.setup import get_deployment_name
 
 
 def create_triage_agent(handoffs: list = None) -> Agent:

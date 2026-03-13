@@ -10,7 +10,7 @@ which is the correct mode for Azure deployments.
 """
 import os
 from openai import AsyncAzureOpenAI
-from agents import set_default_openai_client, set_tracing_disabled
+from agents import set_default_openai_api, set_default_openai_client, set_tracing_disabled
 
 from config import settings
 
@@ -27,10 +27,16 @@ def configure_azure_client() -> AsyncAzureOpenAI:
     """
     global _configured
 
+    # Disable tracing for this sample app to avoid non-fatal auth noise when
+    # using Azure OpenAI credentials (tracing targets OpenAI platform keys).
+    set_tracing_disabled(True)
+    # Azure deployments may not support Responses API for all models/regions.
+    # Force Chat Completions transport for broad compatibility.
+    set_default_openai_api("chat_completions")
+
     if not settings.AZURE_OPENAI_API_KEY or not settings.AZURE_OPENAI_ENDPOINT:
         # No Azure credentials — disable tracing to avoid noise and continue
         # (useful for dev/testing without a real LLM)
-        set_tracing_disabled(True)
         return None
 
     client = AsyncAzureOpenAI(

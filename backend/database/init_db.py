@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS processed_invoices (
     confidence_score REAL,
     status           TEXT,
     decision_reason  TEXT,
+    pipeline_response TEXT,
     agent_trace      TEXT,
     processed_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -181,6 +182,9 @@ def init_db(db_path: str = None):
     cur.execute(CREATE_PROCESSED_INVOICES)
     cur.execute(CREATE_REVIEW_QUEUE)
 
+    # Backward-compatible schema migration for existing DB files.
+    _ensure_processed_invoices_columns(conn)
+
     # Seed vendors (skip if already present)
     cur.executemany(
         "INSERT OR IGNORE INTO vendor_master "
@@ -201,6 +205,27 @@ def init_db(db_path: str = None):
     conn.close()
     print(f"  ✅ Created tables: vendor_master, purchase_orders, processed_invoices, review_queue")
     print(f"  ✅ Seeded {len(VENDORS)} vendors and {len(PURCHASE_ORDERS)} purchase orders")
+
+
+def _ensure_processed_invoices_columns(conn: sqlite3.Connection):
+    """Add newly introduced columns if an older DB already exists."""
+    existing_cols = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(processed_invoices)").fetchall()
+    }
+
+    if "pipeline_response" not in existing_cols:
+        conn.execute(
+            "ALTER TABLE processed_invoices ADD COLUMN pipeline_response TEXT"
+        )
+
+    conn.execute(
+        """UPDATE processed_invoices
+           SET pipeline_response = decision_reason
+           WHERE (pipeline_response IS NULL OR pipeline_response = '')
+             AND decision_reason IS NOT NULL
+             AND decision_reason != ''"""
+    )
 
 
 if __name__ == "__main__":

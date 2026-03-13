@@ -60,6 +60,7 @@ def approve_invoice(
         "confidence_score": confidence_score,
         "status": "approved",
         "decision_reason": decision_reason,
+        "pipeline_response": None,
         "agent_trace": agent_trace if isinstance(agent_trace, str) else json.dumps(agent_trace),
     }
 

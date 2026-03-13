@@ -55,6 +55,7 @@ class ProcessedInvoice(BaseModel):
     confidence_score: Optional[float] = None
     status: str  # approved / flagged_for_review / rejected
     decision_reason: Optional[str] = None
+    pipeline_response: Optional[str] = None
     agent_trace: Optional[str] = None        # JSON string
     processed_at: Optional[str] = None
 
