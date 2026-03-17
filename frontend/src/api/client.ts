@@ -49,6 +49,7 @@ export interface Invoice {
   confidence_score?: number
   status: 'approved' | 'flagged_for_review' | 'rejected'
   decision_reason?: string
+  pipeline_response?: string
   agent_trace?: AgentTraceItem[]
   processed_at?: string
 }
@@ -81,6 +82,43 @@ export interface ReviewQueueItem {
   vendor_id?: string
   total_amount?: number
   currency?: string
+}
+
+export interface VendorHistory {
+  has_history: boolean
+  vendor_id: string
+  message?: string
+  summary?: {
+    total_invoices: number
+    approved: number
+    flagged: number
+    rejected: number
+    approval_rate_pct: number
+    avg_invoice_amount: number
+    min_invoice_amount: number
+    max_invoice_amount: number
+    avg_confidence_score: number
+  }
+  recent_invoices?: {
+    invoice_id: string
+    invoice_number?: string
+    invoice_date?: string
+    total_amount?: number
+    status: string
+    decision_reason?: string
+    confidence_score?: number
+    processed_at?: string
+  }[]
+  common_flag_reasons?: { reason: string; count: number }[]
+  reviewer_notes?: {
+    note: string
+    resolved_by?: string
+    resolved_at?: string
+    original_flag_reason?: string
+    invoice_number?: string
+    invoice_amount?: number
+  }[]
+  interpretation?: string
 }
 
 export interface Stats {
@@ -166,6 +204,40 @@ export const api = {
       .catch((e) => onError(String(e)))
   },
 
+  chatStream(message: string, onEvent: (e: SSEEvent) => void, onDone: () => void, onError: (e: string) => void) {
+    fetch(`${BASE}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Chat failed: ${res.statusText}`)
+        const reader = res.body!.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6)) as SSEEvent
+                onEvent(data)
+                if (data.event === 'pipeline_complete' || data.event === 'pipeline_error') {
+                  onDone()
+                }
+              } catch { /* skip */ }
+            }
+          }
+        }
+        onDone()
+      })
+      .catch((e) => onError(String(e)))
+  },
+
   getInvoices: () => get<Invoice[]>('/invoices'),
   getInvoice: (id: string) => get<Invoice>(`/invoices/${id}`),
   getReviewQueue: (status = 'pending') => get<ReviewQueueItem[]>(`/review-queue?status=${status}`),
@@ -179,4 +251,5 @@ export const api = {
   getVendors: () => get<Vendor[]>('/vendors'),
   getPurchaseOrders: () => get<PurchaseOrder[]>('/purchase-orders'),
   getStats: () => get<Stats>('/stats'),
+  getVendorHistory: (vendorId: string) => get<VendorHistory>(`/vendors/${vendorId}/history`),
 }

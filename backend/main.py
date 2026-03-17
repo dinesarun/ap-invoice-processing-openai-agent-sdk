@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 import aiofiles
@@ -27,7 +27,7 @@ from config import settings
 from database.init_db import init_db
 from database import queries
 from database.models import ReviewResolveRequest, StatsResponse
-from app_agents.orchestrator import process_invoice, process_invoice_streaming
+from app_agents.orchestrator import process_invoice, process_invoice_streaming, process_chat_streaming
 
 
 # ─── App setup ────────────────────────────────────────────────────────────────
@@ -62,12 +62,17 @@ async def startup_event():
 # ─── Invoice Upload + Processing ─────────────────────────────────────────────
 
 @app.post("/api/upload-invoice")
-async def upload_invoice(file: UploadFile = File(...)):
+async def upload_invoice(
+    file: UploadFile = File(...),
+    notes: str = Form(""),
+):
     """
     Upload a PDF invoice and process it through the agent pipeline.
 
+    Accepts an optional `notes` form field — submitter context passed to the
+    agent prompt (e.g. PO reference, pre-approval note, vendor onboarding status).
+
     Returns Server-Sent Events (SSE) for real-time step updates.
-    Each event is a JSON object with an 'event' field describing the step.
     """
     # Validate file type
     if not file.filename.lower().endswith(".pdf"):
@@ -86,7 +91,7 @@ async def upload_invoice(file: UploadFile = File(...)):
     async def event_stream() -> AsyncIterator[str]:
         yield f"data: {json.dumps({'event': 'upload_complete', 'filename': file.filename, 'file_path': file_path})}\n\n"
 
-        async for event in process_invoice_streaming(file_path):
+        async for event in process_invoice_streaming(file_path, notes=notes):
             yield event
 
     return StreamingResponse(
@@ -118,6 +123,38 @@ async def upload_invoice_sync(file: UploadFile = File(...)):
 
     result = await process_invoice(file_path)
     return result
+
+
+# ─── Chat ─────────────────────────────────────────────────────────────────────
+
+from pydantic import BaseModel
+
+
+class ChatRequest(BaseModel):
+    message: str
+
+
+@app.post("/api/chat")
+async def chat(body: ChatRequest):
+    """
+    Handle a text chat query through the Triage Agent.
+    Returns SSE stream with agent responses.
+    """
+    if not body.message or not body.message.strip():
+        raise HTTPException(status_code=400, detail="message cannot be empty")
+
+    async def event_stream() -> AsyncIterator[str]:
+        async for event in process_chat_streaming(body.message.strip()):
+            yield event
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ─── Invoices ─────────────────────────────────────────────────────────────────
@@ -197,6 +234,23 @@ async def list_purchase_orders():
 async def get_stats():
     """Get dashboard statistics."""
     return queries.get_stats()
+
+
+# ─── Vendor History Context ───────────────────────────────────────────────────
+
+@app.get("/api/vendors/{vendor_id}/history")
+async def get_vendor_history(vendor_id: str):
+    """
+    Return the full operational history for a vendor.
+
+    This is the same data the vendor_history_context tool surfaces to the
+    Decision Agent — approval rate, amount ranges, common flag reasons,
+    and human reviewer notes from past review queue resolutions.
+
+    Used by the frontend Vendor Context Panel.
+    """
+    history = queries.get_vendor_invoice_history(vendor_id)
+    return history
 
 
 # ─── Health check ─────────────────────────────────────────────────────────────

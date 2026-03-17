@@ -60,7 +60,12 @@ async def _whisper_async(file_path: str) -> str:
 
         if resp.status_code == 200:
             data = resp.json()
-            return data.get("extracted_text") or data.get("text") or str(data)
+            return (
+                data.get("result_text")
+                or data.get("extracted_text")
+                or data.get("text")
+                or str(data)
+            )
 
         if resp.status_code == 202:
             # Async mode — poll until ready
@@ -83,7 +88,7 @@ async def _whisper_async(file_path: str) -> str:
                 poll_resp = await client.get(
                     f"{base_url}/whisper-status",
                     headers={"unstract-key": api_key},
-                    params={"whisper-hash": whisper_hash},
+                    params={"whisper_hash": whisper_hash},
                 )
                 if poll_resp.status_code == 200:
                     status_data = poll_resp.json()
@@ -92,11 +97,16 @@ async def _whisper_async(file_path: str) -> str:
                         result_resp = await client.get(
                             f"{base_url}/whisper-retrieve",
                             headers={"unstract-key": api_key},
-                            params={"whisper-hash": whisper_hash},
+                            params={"whisper_hash": whisper_hash},
                         )
                         if result_resp.status_code == 200:
                             data = result_resp.json()
-                            return data.get("extracted_text") or data.get("text") or str(data)
+                            return (
+                                data.get("result_text")
+                                or data.get("extracted_text")
+                                or data.get("text")
+                                or str(data)
+                            )
                     elif status_data.get("status") == "error":
                         return f"LLMWhisperer processing error: {status_data}"
 
@@ -108,9 +118,16 @@ async def _whisper_async(file_path: str) -> str:
 def _mock_ocr_text(file_path: str) -> str:
     """
     Returns mock OCR text when LLMWhisperer API key is not configured.
-    Detects invoice type from filename for realistic mock data.
+
+    Only two cases:
+      1. Known demo invoice filenames → return realistic mock invoice text
+         so the demo pipeline works without a real API key.
+      2. Everything else → return a neutral unreadable signal.
+         The Extraction Agent's "is this an invoice?" check then handles
+         ALL non-invoice document types uniformly — no filename whack-a-mole.
     """
-    fname = file_path.lower()
+    import os
+    fname = os.path.basename(file_path).lower()
 
     if "acme" in fname or "invoice_001" in fname or "happy" in fname:
         return """
@@ -177,7 +194,7 @@ Rush Delivery Fee                        1      $3,625.00    $3,625.00
 Remit to: Bank Account ACC-002-8901
 """
 
-    if "newvendor" in fname or "invoice_003" in fname or "unknown" in fname:
+    if "newvendor" in fname or "invoice_003" in fname:
         return """
 INVOICE
 
@@ -236,22 +253,19 @@ Fuel Surcharge                           1       $420.00      $420.00
 Remit payment to: Bank Account ACC-003-2345
 """
 
-    # Generic fallback
-    return """
-INVOICE
+    # Generic fallback — unknown document type.
+    # Return a neutral message so the Extraction Agent can make an honest assessment
+    # rather than hallucinating invoice fields from a fake template.
+    return f"""
+[MOCK OCR — LLMWhisperer API not configured]
 
-Sample Vendor Corp
-100 Business Ave, City, ST 10001
+File: {os.path.basename(file_path)}
 
-Invoice Number: INV-2024-SAMPLE
-Invoice Date: 2024-03-01
-Due Date: 2024-03-31
-Payment Terms: Net 30
+Unable to extract real text from this document.
+The content of this file could not be read — no invoice fields, vendor name,
+line items, or totals are available.
 
-Description             Qty    Unit Price    Amount
-Professional Services    1     $5,000.00    $5,000.00
-
-                              Total:        $5,000.00
+To process real invoices, configure a valid LLMWHISPERER_API_KEY in your .env file.
 """
 
 

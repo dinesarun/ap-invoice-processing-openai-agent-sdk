@@ -1,25 +1,31 @@
-import { useState } from 'react'
-import { LayoutDashboard, Upload, FileText, AlertTriangle, Building2, Menu, Bot } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { LayoutDashboard, FileText, AlertTriangle, Building2, Menu, Bot, Info } from 'lucide-react'
 import clsx from 'clsx'
-import StatsOverview from './components/StatsOverview'
-import InvoiceUpload from './components/InvoiceUpload'
+import Dashboard from './components/Dashboard'
+import About from './components/About'
 import InvoiceList from './components/InvoiceList'
 import ReviewQueue from './components/ReviewQueue'
 import VendorsAndPOs from './components/VendorsAndPOs'
+import { api, type Stats } from './api/client'
 
-type Page = 'dashboard' | 'upload' | 'invoices' | 'review' | 'reference'
+type Page = 'dashboard' | 'invoices' | 'review' | 'reference' | 'about'
 
 const NAV = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'upload',    label: 'Process Invoice', icon: Upload },
-  { id: 'invoices',  label: 'Invoices', icon: FileText },
+  { id: 'dashboard', label: 'Dashboard',    icon: LayoutDashboard },
+  { id: 'invoices',  label: 'Invoices',     icon: FileText },
   { id: 'review',    label: 'Review Queue', icon: AlertTriangle },
   { id: 'reference', label: 'Vendors & POs', icon: Building2 },
+  { id: 'about',     label: 'About',        icon: Info },
 ] as const
 
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [stats, setStats] = useState<Stats | null>(null)
+
+  useEffect(() => {
+    api.getStats().then(setStats).catch(() => {})
+  }, [page])
 
   const navigate = (p: Page) => {
     setPage(p)
@@ -28,7 +34,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex">
-      {/* Mobile overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/40 z-20 lg:hidden"
@@ -36,13 +41,11 @@ export default function App() {
         />
       )}
 
-      {/* Sidebar */}
       <aside className={clsx(
         'fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 flex flex-col transition-transform duration-200',
         'lg:static lg:translate-x-0',
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
-        {/* Logo */}
         <div className="flex items-center gap-3 px-5 py-5 border-b border-slate-700/50">
           <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
             <Bot className="w-5 h-5 text-white" />
@@ -53,7 +56,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1">
           {NAV.map(({ id, label, icon: Icon }) => (
             <button
@@ -72,21 +74,36 @@ export default function App() {
           ))}
         </nav>
 
-        {/* SDK badge */}
         <div className="px-4 py-4 border-t border-slate-700/50">
-          <div className="bg-slate-800 rounded-lg p-3 text-xs text-slate-400 space-y-1">
-            <p className="font-semibold text-slate-300">Agents SDK Primitives</p>
-            <p>🤖 5 Specialized Agents</p>
-            <p>🔀 Chain Handoffs</p>
-            <p>🔧 5 @function_tools</p>
-            <p>🛡 Input + Output Guardrails</p>
-          </div>
+          {stats ? (
+            <div className="bg-slate-800 rounded-lg p-3 text-xs text-slate-400 space-y-2">
+              <p className="font-semibold text-slate-300 text-xs uppercase tracking-wide">Pipeline Stats</p>
+              <div className="flex justify-between">
+                <span>Processed</span>
+                <span className="text-slate-200 font-medium">{stats.total_processed}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Approved</span>
+                <span className="text-emerald-400 font-medium">{stats.approved}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Pending review</span>
+                <span className="text-amber-400 font-medium">{stats.flagged_for_review}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Approval rate</span>
+                <span className="text-blue-400 font-medium">{stats.approval_rate}%</span>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-800 rounded-lg p-3 text-xs text-slate-500 text-center">
+              Loading stats…
+            </div>
+          )}
         </div>
       </aside>
 
-      {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top bar (mobile) */}
         <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200">
           <button onClick={() => setSidebarOpen(true)} className="p-1 text-slate-500">
             <Menu className="w-5 h-5" />
@@ -97,15 +114,12 @@ export default function App() {
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1 p-6 overflow-auto">
-          <div className="max-w-4xl mx-auto">
-            {page === 'dashboard' && <StatsOverview />}
-            {page === 'upload'    && <InvoiceUpload onProcessingComplete={() => {}} />}
-            {page === 'invoices'  && <InvoiceList />}
-            {page === 'review'    && <ReviewQueue />}
-            {page === 'reference' && <VendorsAndPOs />}
-          </div>
+        <main className="flex-1 overflow-auto">
+          <div className={clsx('p-6',                    page !== 'dashboard' && 'hidden')}><Dashboard /></div>
+          <div className={clsx('max-w-4xl mx-auto p-6', page !== 'invoices'  && 'hidden')}><InvoiceList /></div>
+          <div className={clsx('max-w-4xl mx-auto p-6', page !== 'review'    && 'hidden')}><ReviewQueue /></div>
+          <div className={clsx('max-w-4xl mx-auto p-6', page !== 'reference' && 'hidden')}><VendorsAndPOs /></div>
+          <div className={clsx('max-w-4xl mx-auto p-6', page !== 'about'     && 'hidden')}><About /></div>
         </main>
       </div>
     </div>

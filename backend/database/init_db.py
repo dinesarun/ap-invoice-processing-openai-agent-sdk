@@ -73,6 +73,24 @@ CREATE TABLE IF NOT EXISTS review_queue (
 );
 """
 
+CREATE_INVOICE_FINGERPRINTS = """
+CREATE TABLE IF NOT EXISTS invoice_fingerprints (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id      TEXT REFERENCES processed_invoices(invoice_id),
+    content_hash    TEXT NOT NULL,
+    line_items_hash TEXT NOT NULL,
+    vendor_id       TEXT,
+    total_amount    REAL,
+    invoice_date    TEXT,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+CREATE_FINGERPRINT_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS idx_fp_content ON invoice_fingerprints(content_hash);",
+    "CREATE INDEX IF NOT EXISTS idx_fp_line_items ON invoice_fingerprints(line_items_hash);",
+]
+
 # ─── Sample Data ──────────────────────────────────────────────────────────────
 
 VENDORS = [
@@ -181,9 +199,13 @@ def init_db(db_path: str = None):
     cur.execute(CREATE_PURCHASE_ORDERS)
     cur.execute(CREATE_PROCESSED_INVOICES)
     cur.execute(CREATE_REVIEW_QUEUE)
+    cur.execute(CREATE_INVOICE_FINGERPRINTS)
+    for idx_sql in CREATE_FINGERPRINT_INDEXES:
+        cur.execute(idx_sql)
 
     # Backward-compatible schema migration for existing DB files.
     _ensure_processed_invoices_columns(conn)
+    _ensure_invoice_fingerprints_table(conn)
 
     # Seed vendors (skip if already present)
     cur.executemany(
@@ -203,7 +225,7 @@ def init_db(db_path: str = None):
 
     conn.commit()
     conn.close()
-    print(f"  ✅ Created tables: vendor_master, purchase_orders, processed_invoices, review_queue")
+    print(f"  ✅ Created tables: vendor_master, purchase_orders, processed_invoices, review_queue, invoice_fingerprints")
     print(f"  ✅ Seeded {len(VENDORS)} vendors and {len(PURCHASE_ORDERS)} purchase orders")
 
 
@@ -226,6 +248,13 @@ def _ensure_processed_invoices_columns(conn: sqlite3.Connection):
              AND decision_reason IS NOT NULL
              AND decision_reason != ''"""
     )
+
+
+def _ensure_invoice_fingerprints_table(conn: sqlite3.Connection):
+    """Create invoice_fingerprints table and indexes if they don't exist (migration for existing DBs)."""
+    conn.execute(CREATE_INVOICE_FINGERPRINTS)
+    for idx_sql in CREATE_FINGERPRINT_INDEXES:
+        conn.execute(idx_sql)
 
 
 if __name__ == "__main__":

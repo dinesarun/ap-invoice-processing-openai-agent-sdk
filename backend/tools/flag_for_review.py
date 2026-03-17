@@ -6,6 +6,7 @@ import uuid
 from agents import function_tool
 
 from database import queries
+from database.queries import store_invoice_fingerprint
 
 
 @function_tool
@@ -69,6 +70,13 @@ def flag_for_review(
     }
 
     queries.insert_processed_invoice(invoice_data)
+
+    # Store content fingerprint so future submissions can be compared
+    try:
+        fields = json.loads(extracted_fields) if isinstance(extracted_fields, str) else extracted_fields
+        store_invoice_fingerprint(invoice_id, fields, vendor_id or "", total_amount, invoice_date)
+    except Exception:
+        pass
 
     queue_data = {
         "invoice_id": invoice_id,

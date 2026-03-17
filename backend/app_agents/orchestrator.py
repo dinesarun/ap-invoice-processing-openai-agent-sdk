@@ -5,7 +5,10 @@ This module demonstrates all 4 OpenAI Agents SDK primitives working together:
 
   1. AGENTS: Five specialized agents, each with a focused role
   2. HANDOFFS: Triage → Extraction → Vendor → PO Match → Decision
-  3. TOOLS: llmwhisperer_extract, vendor_lookup, po_lookup, approve_invoice, flag_for_review
+  3. TOOLS: llmwhisperer_extract, vendor_lookup, po_lookup,
+           duplicate_invoice_check,         ← deterministic DB lookup, runs first
+           vendor_history_context,          ← context layer: compounds with every invoice
+           approve_invoice, flag_for_review
   4. GUARDRAILS: pdf_file_guardrail (input) + decision_output_guardrail (output)
 
 The Runner.run() call starts the agent loop:
@@ -68,7 +71,14 @@ def build_pipeline():
     return triage_agent
 
 
-async def process_invoice(file_path: str) -> dict:
+def _build_invoice_prompt(file_path: str, notes: str = "") -> str:
+    prompt = f"Process this invoice PDF located at: {file_path}"
+    if notes and notes.strip():
+        prompt += f"\n\nSubmitter notes: {notes.strip()}"
+    return prompt
+
+
+async def process_invoice(file_path: str, notes: str = "") -> dict:
     """
     Process a single invoice through the full agent pipeline.
 
@@ -85,7 +95,8 @@ async def process_invoice(file_path: str) -> dict:
     try:
         result = await Runner.run(
             triage_agent,
-            input=f"Process this invoice PDF located at: {file_path}",
+            input=_build_invoice_prompt(file_path, notes),
+            max_turns=30,
         )
 
         # Extract structured trace from new_items
@@ -115,7 +126,7 @@ async def process_invoice(file_path: str) -> dict:
         }
 
 
-async def process_invoice_streaming(file_path: str) -> AsyncIterator[str]:
+async def process_invoice_streaming(file_path: str, notes: str = "") -> AsyncIterator[str]:
     """
     Process an invoice and yield SSE events as each agent step completes.
 
@@ -137,7 +148,8 @@ async def process_invoice_streaming(file_path: str) -> AsyncIterator[str]:
         # Stream using Runner.run_streamed for real-time events
         result = Runner.run_streamed(
             triage_agent,
-            input=f"Process this invoice PDF located at: {file_path}",
+            input=_build_invoice_prompt(file_path, notes),
+            max_turns=30,
         )
 
         current_agent = "Triage Agent"
@@ -236,6 +248,107 @@ async def process_invoice_streaming(file_path: str) -> AsyncIterator[str]:
         yield _sse({
             "event": "pipeline_error",
             "error": "pipeline_error",
+            "message": str(e),
+        })
+
+
+async def process_chat_streaming(message: str) -> AsyncIterator[str]:
+    """
+    Process a text chat query through the Triage Agent and yield SSE events.
+
+    Used for conversational queries like "show pending invoices" or "show stats".
+    The Triage Agent uses the invoice_query tool to answer directly without
+    spinning up the full extraction pipeline.
+
+    Yields the same SSE event format as process_invoice_streaming.
+    """
+    triage_agent = build_pipeline()
+
+    def _sse(payload: dict) -> str:
+        return f"data: {json.dumps(payload)}\n\n"
+
+    try:
+        result = Runner.run_streamed(
+            triage_agent,
+            input=message,
+            max_turns=10,
+        )
+
+        current_agent = "Triage Agent"
+        step = 0
+
+        async for event in result.stream_events():
+            event_type = event.type
+
+            if event_type == "agent_updated_stream_event":
+                new_agent = event.new_agent.name if event.new_agent else "Unknown"
+                if new_agent != current_agent:
+                    step += 1
+                    yield _sse({
+                        "event": "handoff",
+                        "from_agent": current_agent,
+                        "to_agent": new_agent,
+                        "step": step,
+                    })
+                    current_agent = new_agent
+
+            elif event_type == "run_item_stream_event":
+                item = event.item
+                item_type = getattr(item, "type", None)
+
+                if item_type == "tool_call_item" and hasattr(item, "raw_item"):
+                    raw = item.raw_item
+                    name = getattr(raw, "name", str(raw))
+                    args_str = getattr(raw, "arguments", "{}")
+                    try:
+                        args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                    except Exception:
+                        args = {"raw": args_str}
+                    yield _sse({
+                        "event": "tool_call",
+                        "agent": current_agent,
+                        "tool": name,
+                        "input": args,
+                        "step": step,
+                    })
+
+                elif item_type == "tool_call_output_item":
+                    raw_output = getattr(item, "output", "")
+                    display = raw_output[:500] + "..." if len(str(raw_output)) > 500 else raw_output
+                    yield _sse({
+                        "event": "tool_result",
+                        "agent": current_agent,
+                        "output": display,
+                        "step": step,
+                    })
+
+                elif item_type == "message_output_item":
+                    text = ""
+                    if hasattr(item, "raw_item"):
+                        raw = item.raw_item
+                        if hasattr(raw, "content"):
+                            for c in (raw.content or []):
+                                if hasattr(c, "text"):
+                                    text += c.text
+                    if text:
+                        yield _sse({
+                            "event": "agent_message",
+                            "agent": current_agent,
+                            "message": text[:2000],
+                            "step": step,
+                        })
+
+        final_output = result.final_output
+        yield _sse({
+            "event": "pipeline_complete",
+            "final_output": str(final_output)[:2000] if final_output else "",
+            "trace": [],
+        })
+
+    except Exception as e:
+        yield _sse({
+            "event": "pipeline_error",
+            "error": "chat_error",
             "message": str(e),
         })
 

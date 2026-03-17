@@ -7,6 +7,7 @@ from typing import Optional
 from agents import function_tool
 
 from database import queries
+from database.queries import store_invoice_fingerprint
 
 
 @function_tool
@@ -65,6 +66,13 @@ def approve_invoice(
     }
 
     queries.insert_processed_invoice(data)
+
+    # Store content fingerprint so future submissions can be compared
+    try:
+        fields = json.loads(extracted_fields) if isinstance(extracted_fields, str) else extracted_fields
+        store_invoice_fingerprint(invoice_id, fields, vendor_id, total_amount, invoice_date)
+    except Exception:
+        pass
 
     return json.dumps({
         "success": True,

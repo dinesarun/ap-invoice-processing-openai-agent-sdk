@@ -24,6 +24,7 @@ ENV/
 *.sqlite3
 
 # Uploads / generated files
+uploads/
 backend/uploads/
 
 # Node.js
