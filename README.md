@@ -10,11 +10,19 @@ Every document submitted follows one of three paths depending on what the agents
 
 ```mermaid
 flowchart TD
-    Upload([📄 PDF Upload]) --> Guard{Input Guardrail\nPDF validation}
-    Query([💬 Chat Query]) --> Triage
+    Upload([📄 PDF Upload]) --> G1{Guardrail 1\nDeterministic\nPDF validation}
+    Query([💬 Chat Query]) --> G3{Guardrail 3\nLLM-judgment\nAP intent check}
 
-    Guard -->|❌ Not a PDF| GFail([Rejected immediately\nno pipeline started])
-    Guard -->|✅ Valid PDF| Triage[Triage Agent\nroutes to Extraction]
+    G1 -->|❌ Not a PDF\nempty · bad bytes| GFail1([Rejected\nbefore pipeline starts])
+    G1 -->|✅ Valid PDF| G2{Guardrail 2\nLLM-judgment\nNotes injection check}
+
+    G2 -->|❌ Manipulation attempt\n'ignore vendor check'\n'force approve'| GFail2([Rejected\nnotes blocked])
+    G2 -->|✅ Legitimate business\ncontext or no notes| Triage
+
+    G3 -->|❌ Out of scope\ncooking · travel · unrelated| GFail3([Rejected\nout of AP scope])
+    G3 -->|✅ AP-related query| Triage
+
+    Triage[Triage Agent\nentry point + query handler]
 
     Triage --> Extract[Extraction Agent\nLLMWhisperer OCR]
 
@@ -41,13 +49,19 @@ flowchart TD
     Decision -->|🟡 Minor issues\nmissing PO · low confidence\nvariance 5–10%| FlagC[flag_for_review\npriority: medium]
     Decision -->|🔴 Unknown vendor\nvariance > 10%\nfraud signal| FlagD[flag_for_review\npriority: high]
 
-    Approve --> DB1[(✅ approved)]
+    Approve --> OG{Output Guardrail\nDecision field validation}
+    OG -->|✅ All fields present| DB1[(✅ approved)]
+    OG -->|❌ Missing fields| OGFail([Pipeline error\nre-run triggered])
+
     FlagC --> DB2[(⚠️ review queue\nmedium)]
     FlagD --> DB3[(🚨 review queue\nhigh)]
 
+    style GFail1 fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
+    style GFail2 fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
+    style GFail3 fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
     style StopA fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
     style StopB fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
-    style GFail fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
+    style OGFail fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
     style Approve fill:#dcfce7,stroke:#16a34a,color:#14532d
     style DB1 fill:#dcfce7,stroke:#16a34a,color:#14532d
     style DB2 fill:#fef9c3,stroke:#ca8a04,color:#713f12
@@ -57,6 +71,10 @@ flowchart TD
     style FlagB fill:#fee2e2,stroke:#ef4444
     style FlagC fill:#fef9c3,stroke:#ca8a04
     style FlagD fill:#fee2e2,stroke:#ef4444
+    style G1 fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    style G2 fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+    style G3 fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+    style OG fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
 ```
 
 ### Path Summary
