@@ -36,7 +36,21 @@ from app_agents.po_match_agent import create_po_match_agent
 from app_agents.decision_agent import create_decision_agent
 from database import queries as db_queries
 from guardrails.input_guardrail import pdf_file_guardrail
+from guardrails.notes_injection_guardrail import notes_injection_guardrail
+from guardrails.chat_intent_guardrail import chat_intent_guardrail
 from guardrails.output_guardrail import decision_output_guardrail
+
+
+def _guardrail_message(exc: Exception) -> str:
+    """Extract a human-readable reason from a guardrail tripwire exception."""
+    try:
+        # SDK stores the GuardrailFunctionOutput in exc.output
+        info = exc.output.output_info  # type: ignore[attr-defined]
+        if hasattr(info, "reason"):
+            return info.reason
+    except Exception:
+        pass
+    return str(exc)
 
 
 def build_pipeline():
@@ -66,7 +80,11 @@ def build_pipeline():
     # Step 1: Triage Agent (entry point) → hands off to Extraction
     # Also attaches the PDF input guardrail
     triage_agent = create_triage_agent(handoffs=[extraction_agent])
-    triage_agent.input_guardrails = [pdf_file_guardrail]
+    triage_agent.input_guardrails = [
+        pdf_file_guardrail,          # deterministic: valid PDF file
+        notes_injection_guardrail,   # LLM: submitter notes not manipulative
+        chat_intent_guardrail,       # LLM: chat query is AP-related
+    ]
 
     return triage_agent
 
@@ -113,7 +131,7 @@ async def process_invoice(file_path: str, notes: str = "") -> dict:
         return {
             "success": False,
             "error": "input_validation_failed",
-            "message": str(e),
+            "message": _guardrail_message(e),
             "trace": [],
         }
     except Exception as e:
@@ -242,7 +260,7 @@ async def process_invoice_streaming(file_path: str, notes: str = "") -> AsyncIte
         yield _sse({
             "event": "pipeline_error",
             "error": "input_validation_failed",
-            "message": str(e),
+            "message": _guardrail_message(e),
         })
     except Exception as e:
         yield _sse({
@@ -345,6 +363,12 @@ async def process_chat_streaming(message: str) -> AsyncIterator[str]:
             "trace": [],
         })
 
+    except InputGuardrailTripwireTriggered as e:
+        yield _sse({
+            "event": "pipeline_error",
+            "error": "input_validation_failed",
+            "message": _guardrail_message(e),
+        })
     except Exception as e:
         yield _sse({
             "event": "pipeline_error",

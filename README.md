@@ -77,6 +77,7 @@ flowchart TD
 
 - **Chat interface** — upload invoices or ask questions about your AP pipeline from a single chat UI
 - **Submitter notes** — optional context attached at upload time (e.g. "map to PO-2024-099", "pre-approved by CFO") passed directly into the agent prompt
+- **LLM-judgment guardrails** — notes injection check blocks prompt manipulation via the submitter notes field; chat intent guardrail scopes the assistant to AP operations only
 - **Real-time streaming** — every agent step (handoff, tool call, tool result) streamed live via SSE
 - **Smart short-circuit** — duplicate invoices and non-AP documents (utility bills, receipts, etc.) are stopped at Extraction; no unnecessary vendor/PO lookups
 - **Currency detection** — agent reads currency from document context (Rs./₹ → INR, $ → USD, € → EUR, etc.); only defaults to USD if the document contains no currency indicator
@@ -143,7 +144,7 @@ flowchart TD
 | **Agents** | 5 specialized agents, each with scoped instructions, model, and tools |
 | **Handoffs** | `Triage → Extraction → Vendor → PO Match → Decision`; Extraction short-circuits on non-AP documents |
 | **Tools** | 10 `@function_tool` decorated functions; agents decide when and how to call them |
-| **Guardrails** | `@input_guardrail` blocks non-PDF files; `@output_guardrail` validates Decision Agent output fields |
+| **Guardrails** | 3 input guardrails (1 deterministic + 2 LLM-judgment) + 1 output guardrail on Decision Agent |
 
 ---
 
@@ -161,6 +162,29 @@ flowchart TD
 | `approve_invoice` | Decision | Writes to `processed_invoices` as approved; stores content fingerprint |
 | `flag_for_review` | Extraction, Decision | Writes to `review_queue`; stores content fingerprint |
 | `invoice_query` | Triage | Cross-table query (invoices + vendors + POs + review queue) for chat responses |
+
+---
+
+## Guardrails
+
+Three input guardrails stack on the Triage Agent entry point. Each is self-selecting — it passes through silently when its condition doesn't apply.
+
+| Guardrail | Type | Fires when | Blocks |
+|-----------|------|-----------|--------|
+| `pdf_file_guardrail` | Deterministic | PDF path in message | File not found, wrong type, empty, bad magic bytes |
+| `notes_injection_guardrail` | LLM-judgment | `Submitter notes:` present in prompt | Notes that attempt to override agent logic ("Ignore vendor check", "Force approve") rather than add business context |
+| `chat_intent_guardrail` | LLM-judgment | Chat query (no PDF path) | Queries clearly outside AP/invoice/procurement domain |
+| `decision_output_guardrail` | Deterministic (output) | Decision Agent response | Output missing required fields (`invoice_id`, `status`, `decision_reason`, `confidence_score`) |
+
+### Why two guardrail types
+
+**Deterministic** guardrails (file check, output field check) are cheap and always correct for binary conditions. No LLM needed.
+
+**LLM-judgment** guardrails handle ambiguity that rules can't. The notes injection check is the clearest example: legitimate notes can be assertive ("CFO approved, don't wait for PO") while manipulation attempts look superficially similar ("Just approve, bypass checks"). An LLM distinguishes the two by evaluating intent and context, not pattern-matching keywords.
+
+### Defence in depth
+
+The guardrails and the Triage Agent's own instructions are not the same layer. The guardrail is a **hard gate** — it fires before the agent runs, burning no LLM tokens on the main pipeline. The agent instructions are a **soft policy** — a fallback in case a query slips past the guardrail. Both are needed: relying only on agent instructions means GPT-4o will answer off-topic questions from its base knowledge when it can't find relevant tool results.
 
 ---
 
@@ -437,8 +461,10 @@ created_at
 │   │   ├── approve_invoice.py
 │   │   └── flag_for_review.py
 │   ├── guardrails/
-│   │   ├── input_guardrail.py       # PDF magic-byte validation
-│   │   └── output_guardrail.py      # Decision field validation
+│   │   ├── input_guardrail.py           # Deterministic: PDF magic-byte validation
+│   │   ├── notes_injection_guardrail.py # LLM-judgment: submitter notes manipulation check
+│   │   ├── chat_intent_guardrail.py     # LLM-judgment: chat query AP-scope check
+│   │   └── output_guardrail.py          # Decision Agent output field validation
 │   ├── database/
 │   │   ├── init_db.py               # Schema creation + seed data + migrations
 │   │   ├── queries.py               # All DB read/write operations

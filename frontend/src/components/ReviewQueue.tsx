@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, XCircle, RefreshCw, Clock } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, XCircle, RefreshCw, Clock, ChevronDown, ChevronUp, User, FileText } from 'lucide-react'
 import { api, ReviewQueueItem } from '../api/client'
 import clsx from 'clsx'
 
@@ -8,6 +8,22 @@ function PriorityBadge({ priority }: { priority: ReviewQueueItem['priority'] }) 
   if (priority === 'medium') return <span className="badge-yellow">Medium</span>
   return <span className="badge-gray">Low</span>
 }
+
+function ResolutionBadge({ status }: { status?: string }) {
+  if (status === 'approved') return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+      <CheckCircle2 className="w-3 h-3" /> Approved
+    </span>
+  )
+  if (status === 'rejected') return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
+      <XCircle className="w-3 h-3" /> Rejected
+    </span>
+  )
+  return <span className="badge-green">Resolved</span>
+}
+
+// ─── Resolve Modal ────────────────────────────────────────────────────────────
 
 interface ResolveModalProps {
   item: ReviewQueueItem
@@ -87,6 +103,129 @@ function ResolveModal({ item, onClose, onResolved }: ResolveModalProps) {
   )
 }
 
+// ─── Queue Item Card ──────────────────────────────────────────────────────────
+
+function QueueCard({
+  item,
+  onReview,
+}: {
+  item: ReviewQueueItem
+  onReview?: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const isResolved = item.status === 'resolved'
+  const currency = item.currency || '$'
+  const amount = item.total_amount != null
+    ? `${currency === 'USD' || currency === '$' ? '$' : currency + ' '}${item.total_amount.toLocaleString()}`
+    : '—'
+
+  return (
+    <div className={clsx(
+      'bg-white border rounded-xl transition-all duration-150',
+      isResolved ? 'border-slate-200' : 'border-amber-200 shadow-sm',
+    )}>
+      {/* Always-visible row */}
+      <div
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <AlertTriangle className={clsx('w-4 h-4 flex-shrink-0', isResolved ? 'text-slate-300' : 'text-amber-400')} />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-slate-900 text-sm">
+              {item.invoice_number || item.invoice_id}
+            </span>
+            <PriorityBadge priority={item.priority} />
+            {isResolved && <ResolutionBadge status={item.invoice_status} />}
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5 truncate">
+            {item.vendor_id || 'Unknown vendor'} · {amount}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {!isResolved && onReview && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onReview() }}
+              className="btn-primary text-xs py-1 px-3"
+            >
+              Review
+            </button>
+          )}
+          {expanded
+            ? <ChevronUp className="w-4 h-4 text-slate-400" />
+            : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </div>
+      </div>
+
+      {/* Expanded detail panel */}
+      {expanded && (
+        <div className="border-t border-slate-100 px-4 py-3 space-y-3">
+          {/* Flag reason */}
+          <div className="flex gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-800 leading-relaxed">{item.reason}</p>
+          </div>
+
+          {/* Resolution detail — only for resolved items */}
+          {isResolved && (
+            <div className={clsx(
+              'rounded-lg px-3 py-2.5 space-y-1.5 border text-xs',
+              item.invoice_status === 'approved'
+                ? 'bg-emerald-50 border-emerald-100'
+                : item.invoice_status === 'rejected'
+                  ? 'bg-red-50 border-red-100'
+                  : 'bg-slate-50 border-slate-100',
+            )}>
+              <p className={clsx(
+                'font-medium',
+                item.invoice_status === 'approved' ? 'text-emerald-700'
+                  : item.invoice_status === 'rejected' ? 'text-red-700'
+                  : 'text-slate-600',
+              )}>
+                {item.invoice_status === 'approved' ? '✓ Approved by reviewer'
+                  : item.invoice_status === 'rejected' ? '✗ Rejected by reviewer'
+                  : 'Resolved'}
+              </p>
+              {item.notes && (
+                <div className="flex gap-1.5 text-slate-600">
+                  <FileText className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                  <span className="italic">"{item.notes}"</span>
+                </div>
+              )}
+              <div className="flex items-center gap-3 text-slate-400 pt-0.5">
+                {item.resolved_by && (
+                  <span className="flex items-center gap-1">
+                    <User className="w-3 h-3" />
+                    {item.resolved_by}
+                  </span>
+                )}
+                {item.resolved_at && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {new Date(item.resolved_at).toLocaleString()}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Flagged at */}
+          {!isResolved && item.created_at && (
+            <p className="flex items-center gap-1.5 text-xs text-slate-400">
+              <Clock className="w-3 h-3" />
+              Flagged {new Date(item.created_at).toLocaleString()}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function ReviewQueue() {
   const [items, setItems] = useState<ReviewQueueItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -147,58 +286,24 @@ export default function ReviewQueue() {
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-slate-400">Loading…</div>
+        <div className="space-y-2">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-16 bg-slate-100 rounded-xl animate-pulse" />
+          ))}
+        </div>
       ) : items.length === 0 ? (
         <div className="card p-12 text-center">
           <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
           <p className="text-slate-500">No {statusFilter} items in the review queue.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {items.map((item) => (
-            <div key={item.id} className="card p-4">
-              <div className="flex items-start gap-4">
-                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-slate-900">
-                      {item.invoice_number || item.invoice_id}
-                    </span>
-                    <PriorityBadge priority={item.priority} />
-                    {item.status === 'resolved' && (
-                      <span className="badge-green">Resolved</span>
-                    )}
-                  </div>
-                  <p className="text-sm text-slate-500 mt-0.5">
-                    Vendor: {item.vendor_id || '—'} •{' '}
-                    {item.total_amount != null ? `$${item.total_amount.toLocaleString()}` : '—'}
-                  </p>
-                  <p className="text-sm text-amber-700 mt-1.5 bg-amber-50 rounded px-2 py-1">
-                    {item.reason}
-                  </p>
-                  {item.notes && (
-                    <p className="text-sm text-slate-600 mt-1.5 italic">"{item.notes}"</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <Clock className="w-3.5 h-3.5 text-slate-300" />
-                    <span className="text-xs text-slate-400">
-                      {item.created_at ? new Date(item.created_at).toLocaleString() : ''}
-                    </span>
-                    {item.resolved_by && (
-                      <span className="text-xs text-slate-400">• Resolved by: {item.resolved_by}</span>
-                    )}
-                  </div>
-                </div>
-                {item.status === 'pending' && (
-                  <button
-                    onClick={() => setResolveItem(item)}
-                    className="btn-primary flex-shrink-0"
-                  >
-                    Review
-                  </button>
-                )}
-              </div>
-            </div>
+            <QueueCard
+              key={item.id}
+              item={item}
+              onReview={item.status === 'pending' ? () => setResolveItem(item) : undefined}
+            />
           ))}
         </div>
       )}

@@ -176,7 +176,8 @@ def insert_review_queue_item(data: Dict) -> int:
 def list_review_queue(status: str = "pending") -> List[Dict]:
     with get_conn() as conn:
         rows = conn.execute(
-            """SELECT rq.*, pi.invoice_number, pi.vendor_id, pi.total_amount, pi.currency
+            """SELECT rq.*, pi.invoice_number, pi.vendor_id, pi.total_amount, pi.currency,
+                      pi.status as invoice_status
                FROM review_queue rq
                LEFT JOIN processed_invoices pi ON rq.invoice_id = pi.invoice_id
                WHERE rq.status = ?

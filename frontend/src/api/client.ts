@@ -82,6 +82,7 @@ export interface ReviewQueueItem {
   vendor_id?: string
   total_amount?: number
   currency?: string
+  invoice_status?: string  // 'approved' | 'rejected' after resolution
 }
 
 export interface VendorHistory {
