@@ -8,3 +8,7 @@ python-multipart>=0.0.12
 fpdf2>=2.8.1
 httpx>=0.28.0
 pydantic>=2.10.0
+
+# Observability (optional — set LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY to activate)
+langfuse>=4.0.0
+openinference-instrumentation-openai-agents>=0.1.0

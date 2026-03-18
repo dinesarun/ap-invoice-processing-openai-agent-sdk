@@ -28,13 +28,14 @@ from database.init_db import init_db
 from database import queries
 from database.models import ReviewResolveRequest, StatsResponse
 from app_agents.orchestrator import process_invoice, process_invoice_streaming, process_chat_streaming
+from observability import setup_observability, flush_observability, is_observability_active, get_setup_error
 
 
 # ─── App setup ────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="AP Invoice Processing Agent",
-    description="Agentic AP invoice processing using OpenAI Agents SDK + Azure OpenAI",
+    description="Agentic AP invoice processing using OpenAI Agents SDK + LLMWhisperer + Azure OpenAI",
     version="1.0.0",
 )
 
@@ -52,11 +53,19 @@ os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize the database on startup."""
+    """Initialize the database and observability on startup."""
     init_db(settings.SQLITE_DB_PATH)
+    setup_observability()
     print("✅ AP Invoice Processing Agent started")
     print(f"   DB: {settings.SQLITE_DB_PATH}")
     print(f"   Upload dir: {settings.UPLOAD_DIR}")
+    print(f"   Observability: {'Langfuse active' if is_observability_active() else 'inactive (set LANGFUSE keys to enable)'}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Flush Langfuse spans before process exits."""
+    flush_observability()
 
 
 # ─── Invoice Upload + Processing ─────────────────────────────────────────────
@@ -236,6 +245,54 @@ async def get_stats():
     return queries.get_stats()
 
 
+# ─── Logs (Langfuse traces) ───────────────────────────────────────────────────
+
+@app.get("/api/logs")
+async def get_logs(limit: int = 20):
+    """
+    Fetch recent pipeline traces from Langfuse.
+    Returns empty list if Langfuse is not configured.
+    """
+    import base64 as _b64
+    from observability import is_observability_active
+
+    public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
+    secret_key = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
+    base_url = os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com").rstrip("/")
+
+    if not public_key or not secret_key or not is_observability_active():
+        return {"available": False, "traces": [], "langfuse_url": base_url}
+
+    auth = _b64.b64encode(f"{public_key}:{secret_key}".encode()).decode()
+
+    try:
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{base_url}/api/public/traces",
+                headers={"Authorization": f"Basic {auth}"},
+                params={"limit": limit, "orderBy": "timestamp.desc"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                traces = [
+                    {
+                        "id": t.get("id"),
+                        "name": t.get("name", ""),
+                        "timestamp": t.get("timestamp", ""),
+                        "latency": t.get("latency"),
+                        "observations": t.get("observations"),
+                        "status": t.get("status"),
+                    }
+                    for t in data.get("data", [])
+                ]
+                return {"available": True, "traces": traces, "langfuse_url": base_url}
+    except Exception:
+        pass
+
+    return {"available": True, "traces": [], "langfuse_url": base_url}
+
+
 # ─── Vendor History Context ───────────────────────────────────────────────────
 
 @app.get("/api/vendors/{vendor_id}/history")
@@ -258,3 +315,17 @@ async def get_vendor_history(vendor_id: str):
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "AP Invoice Processing Agent"}
+
+
+@app.get("/api/debug/observability")
+async def debug_observability():
+    """Debug endpoint — shows what happened during Langfuse setup."""
+    return {
+        "active": is_observability_active(),
+        "error": get_setup_error(),
+        "env": {
+            "LANGFUSE_PUBLIC_KEY": bool(os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()),
+            "LANGFUSE_SECRET_KEY": bool(os.getenv("LANGFUSE_SECRET_KEY", "").strip()),
+            "LANGFUSE_BASE_URL": os.getenv("LANGFUSE_BASE_URL", "(not set)"),
+        },
+    }

@@ -14,39 +14,44 @@ def create_vendor_agent(handoffs: list = None) -> Agent:
     return Agent(
         name="Vendor Lookup Agent",
         model=get_deployment_name(),
-        instructions="""You are an AP vendor validation agent.
+            instructions="""You are an AP vendor validation agent.
 
-You receive extracted invoice data from the Extraction Agent and validate
-the vendor against our internal vendor master database.
+You receive extracted invoice fields from Extraction Agent and validate the
+vendor against the internal vendor master.
 
-WORKFLOW:
-1. Take the vendor_name from the extracted invoice fields.
-2. Call the vendor_lookup tool with the vendor_name to find the vendor.
-3. Analyze the results:
+Follow this process strictly.
 
-   VENDOR FOUND + ACTIVE:
-   - Record the vendor_id
-   - Note the payment terms (compare with invoice payment terms)
-   - Status: "vendor_validated"
+Step 1: Read vendor_name from extracted invoice data.
 
-   VENDOR FOUND + INACTIVE/BLOCKED:
-   - Status: "vendor_inactive"
-   - This will likely result in the invoice being flagged for review
-   - Note: "Vendor exists but is inactive — requires AP manager approval"
+Step 2: Call vendor_lookup with vendor_name.
 
-   VENDOR NOT FOUND:
-   - Try searching with just the first word of the vendor name as a backup
-   - If still not found: status = "vendor_not_found"
-   - This is a significant flag — we cannot pay unknown vendors
+Step 3: If vendor is not found, run one fallback lookup.
+- Retry vendor_lookup using only the first word of vendor_name.
+- If still not found, treat as vendor_not_found.
 
-4. Add your findings to the context and explicitly state:
-   - vendor_id (or null if not found)
-   - vendor_status: "active" | "inactive" | "blocked" | "not_found"
-   - vendor_validation_note: your assessment
+Step 4: Classify vendor status and note impact.
+- If found and active:
+   - vendor_status="active"
+   - include vendor_id
+   - compare master payment terms vs invoice payment terms when available
+- If found and inactive or blocked:
+   - vendor_status="inactive" or "blocked" (match tool result)
+   - include vendor_id
+   - note that AP manager review is likely required
+- If not found after fallback:
+   - vendor_status="not_found"
+   - vendor_id=null
+   - note that unknown vendors are high-risk for payment processing
 
-5. Hand off to the PO Matching Agent with all context including your findings.
+Step 5: Add structured findings to context.
+- vendor_id (or null)
+- vendor_status: active | inactive | blocked | not_found
+- vendor_validation_note: concise assessment
 
-Be thorough but concise. The next agent needs clear vendor_id and status.""",
+Step 6: Hand off to PO Matching Agent with all accumulated context.
+
+Be concise and explicit. Downstream agents require clear vendor_id and
+vendor_status.""",
         tools=[vendor_lookup],
         handoffs=handoffs or [],
     )

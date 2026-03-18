@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Send, Paperclip, Bot, User, ChevronDown, ChevronUp, Loader2, X } from 'lucide-react'
-import { api, type SSEEvent, type Stats } from '../api/client'
+import { api, type SSEEvent } from '../api/client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -130,6 +130,13 @@ function AgentBubble({ msg }: { msg: ChatMsg }) {
                   )}
                 </div>
               )}
+              <div className={`flex items-center gap-1 pt-1 text-xs ${msg.error ? 'text-red-400' : 'text-emerald-500'}`}>
+                {msg.error ? (
+                  <><span>✗</span><span>Failed</span></>
+                ) : (
+                  <><span>✓</span><span>Completed</span></>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -140,20 +147,35 @@ function AgentBubble({ msg }: { msg: ChatMsg }) {
 
 // ─── Main component ───────────────────────────────────────────────────────
 
+const STORAGE_KEY = 'ap_dashboard_messages'
+
+function loadMessages(): ChatMsg[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as ChatMsg[]
+    // Drop any messages that were mid-flight when the page was closed
+    return parsed.filter((m) => !m.isLoading)
+  } catch {
+    return []
+  }
+}
+
 export default function Dashboard() {
-  const [messages, setMessages] = useState<ChatMsg[]>([])
+  const [messages, setMessages] = useState<ChatMsg[]>(loadMessages)
   const [input, setInput] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
-  const [stats, setStats] = useState<Stats | null>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [submitterNotes, setSubmitterNotes] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const notesRef = useRef<HTMLTextAreaElement>(null)
 
+  // Persist completed messages to localStorage
   useEffect(() => {
-    api.getStats().then(setStats).catch(() => {})
-  }, [])
+    const completed = messages.filter((m) => !m.isLoading)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(completed))
+  }, [messages])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -182,8 +204,6 @@ export default function Dashboard() {
       return msgs
     })
     setIsProcessing(false)
-    // Refresh stats after any operation
-    api.getStats().then(setStats).catch(() => {})
   }
 
   const handleSSEEvent = (e: SSEEvent) => {
@@ -301,28 +321,17 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-2rem)] max-w-4xl mx-auto">
-      {/* Stats bar */}
-      {stats && (
-        <div className="flex items-center gap-4 px-4 py-3 bg-white border border-slate-200 rounded-xl mb-4 flex-wrap">
-          <div className="text-xs text-slate-500">
-            <span className="font-semibold text-slate-700">{stats.total_processed}</span> processed
-          </div>
-          <div className="w-px h-3 bg-slate-200" />
-          <div className="text-xs text-slate-500">
-            <span className="font-semibold text-emerald-600">{stats.approved}</span> approved
-          </div>
-          <div className="w-px h-3 bg-slate-200" />
-          <div className="text-xs text-slate-500">
-            <span className="font-semibold text-amber-600">{stats.flagged_for_review}</span> pending review
-          </div>
-          <div className="w-px h-3 bg-slate-200" />
-          <div className="text-xs text-slate-500">
-            <span className="font-semibold text-purple-600">{Math.round(stats.avg_confidence_score * 100)}%</span> avg confidence
-          </div>
-          <div className="w-px h-3 bg-slate-200" />
-          <div className="text-xs text-slate-500">
-            <span className="font-semibold text-blue-600">{stats.approval_rate}%</span> approval rate
-          </div>
+      {isProcessing && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-100 rounded-xl mb-3 text-sm text-blue-700">
+          <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+          </span>
+          <span className="font-medium">Processing</span>
+          <span className="text-blue-500">·</span>
+          <span className="text-blue-600 truncate">
+            {messages.filter(m => m.role === 'agent' && m.isLoading).slice(-1)[0]?.steps.slice(-1)[0]?.description ?? 'Pipeline running…'}
+          </span>
         </div>
       )}
 

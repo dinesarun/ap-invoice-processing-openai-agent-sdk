@@ -1,20 +1,22 @@
 import { useState, useEffect } from 'react'
-import { LayoutDashboard, FileText, AlertTriangle, Building2, Menu, Bot, Info } from 'lucide-react'
+import { LayoutDashboard, FileText, AlertTriangle, Building2, Menu, Bot, Info, ScrollText } from 'lucide-react'
 import clsx from 'clsx'
 import Dashboard from './components/Dashboard'
 import About from './components/About'
 import InvoiceList from './components/InvoiceList'
 import ReviewQueue from './components/ReviewQueue'
 import VendorsAndPOs from './components/VendorsAndPOs'
+import Logs from './components/Logs'
 import { api, type Stats } from './api/client'
 
-type Page = 'dashboard' | 'invoices' | 'review' | 'reference' | 'about'
+type Page = 'dashboard' | 'invoices' | 'review' | 'reference' | 'logs' | 'about'
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard',    icon: LayoutDashboard },
   { id: 'invoices',  label: 'Invoices',     icon: FileText },
   { id: 'review',    label: 'Review Queue', icon: AlertTriangle },
   { id: 'reference', label: 'Vendors & POs', icon: Building2 },
+  { id: 'logs',      label: 'Logs',         icon: ScrollText },
   { id: 'about',     label: 'About',        icon: Info },
 ] as const
 
@@ -46,13 +48,13 @@ export default function App() {
         'lg:static lg:translate-x-0',
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-slate-700/50">
+        <div className="flex items-center gap-3 px-4 py-4 border-b border-slate-700/50">
           <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
             <Bot className="w-5 h-5 text-white" />
           </div>
           <div>
-            <p className="font-semibold text-white text-sm leading-tight">AP Invoice Agent</p>
-            <p className="text-xs text-slate-400">OpenAI Agents SDK</p>
+            <p className="font-semibold text-white text-sm leading-snug">AP Invoice</p>
+            <p className="text-xs text-slate-400 leading-tight">Processing Agent</p>
           </div>
         </div>
 
@@ -119,6 +121,7 @@ export default function App() {
           <div className={clsx('max-w-4xl mx-auto p-6', page !== 'invoices'  && 'hidden')}><InvoiceList /></div>
           <div className={clsx('max-w-4xl mx-auto p-6', page !== 'review'    && 'hidden')}><ReviewQueue /></div>
           <div className={clsx('max-w-4xl mx-auto p-6', page !== 'reference' && 'hidden')}><VendorsAndPOs /></div>
+          <div className={clsx('max-w-4xl mx-auto p-6', page !== 'logs'      && 'hidden')}><Logs /></div>
           <div className={clsx('max-w-4xl mx-auto p-6', page !== 'about'     && 'hidden')}><About /></div>
         </main>
       </div>

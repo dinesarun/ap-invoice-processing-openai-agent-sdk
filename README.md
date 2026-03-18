@@ -175,6 +175,7 @@ flowchart TD
 | Backend | FastAPI + Uvicorn, SSE streaming |
 | Frontend | React + Vite + TypeScript + Tailwind CSS |
 | Real-time | Server-Sent Events — each agent step streamed live to the UI |
+| Observability | Langfuse v4 + OpenInference instrumentation — full agent trace per invoice run *(optional)* |
 
 ---
 
@@ -278,6 +279,29 @@ Set `AZURE_OPENAI_DEPLOYMENT` to whatever deployment name you chose in step 4.
 
 ---
 
+### Langfuse *(optional — observability)*
+
+Langfuse gives you a full trace dashboard for every invoice run: which agents ran, what tools were called, what the LLM decided at each step, token usage, latency, and errors. Free tier is **50K observations/month**.
+
+1. Sign up at [langfuse.com](https://langfuse.com) (or [cloud.langfuse.com](https://cloud.langfuse.com))
+2. Create a project → copy the **Public Key** and **Secret Key**
+3. Add them to your `.env` (see below) — the app activates tracing automatically on next start
+4. Open your Langfuse project dashboard to see traces appear in real time as invoices are processed
+
+Pick the host closest to you:
+
+| Region | `LANGFUSE_BASE_URL` |
+|--------|---------------------|
+| EU *(default)* | `https://cloud.langfuse.com` |
+| US | `https://us.cloud.langfuse.com` |
+| Self-hosted | your own URL |
+
+> Langfuse is fully **optional** — the app runs identically without it. If keys are missing, observability is silently skipped.
+
+> **Important:** The backend must be started with the virtualenv **activated** (`source venv/bin/activate`) for Langfuse to load. If you start uvicorn without activating the venv, the `langfuse` package won't be found even if it's installed. Verify setup by hitting `GET /api/debug/observability` after starting the server.
+
+---
+
 ### `.env` file
 
 ```env
@@ -290,6 +314,11 @@ AZURE_OPENAI_DEPLOYMENT=gpt-4o          # your deployment name
 # LLMWhisperer OCR
 LLMWHISPERER_API_KEY=your_unstract_key
 LLMWHISPERER_BASE_URL=https://llmwhisperer-api.us-central.unstract.com/api/v2
+
+# Langfuse observability (optional)
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
 
 # App (defaults shown — change if needed)
 SQLITE_DB_PATH=./ap_invoices.db
@@ -339,7 +368,9 @@ Notes are appended to the agent prompt as `Submitter notes: …` and are visible
 | `GET` | `/api/vendors/{id}/history` | Full behavioral history for a vendor |
 | `GET` | `/api/purchase-orders` | Purchase order list |
 | `GET` | `/api/stats` | Aggregate stats |
+| `GET` | `/api/logs` | Recent Langfuse traces (returns empty list if not configured) |
 | `GET` | `/api/health` | Health check |
+| `GET` | `/api/debug/observability` | Observability setup status — useful for diagnosing Langfuse config issues |
 
 ---
 
@@ -414,12 +445,14 @@ created_at
 │   │   └── models.py                # Pydantic request/response models
 │   ├── main.py                      # FastAPI app + all endpoints
 │   ├── config.py                    # Settings loaded from .env
+│   ├── observability.py             # Langfuse v4 + OpenInference setup (optional)
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/
 │   └── src/
 │       ├── components/
 │       │   ├── Dashboard.tsx        # Chat interface + file upload + submitter notes
+│       │   ├── Logs.tsx             # Langfuse trace viewer (Pipeline Logs tab)
 │       │   ├── About.tsx            # SDK primitives + pipeline architecture
 │       │   ├── InvoiceList.tsx      # Processed invoices table
 │       │   ├── ReviewQueue.tsx      # Flagged invoices + human resolution

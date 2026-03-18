@@ -252,4 +252,5 @@ export const api = {
   getPurchaseOrders: () => get<PurchaseOrder[]>('/purchase-orders'),
   getStats: () => get<Stats>('/stats'),
   getVendorHistory: (vendorId: string) => get<VendorHistory>(`/vendors/${vendorId}/history`),
+  getLogs: (limit = 20) => get<{ available: boolean; traces: unknown[]; langfuse_url: string }>(`/logs?limit=${limit}`),
 }
