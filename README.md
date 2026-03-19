@@ -17,14 +17,19 @@ flowchart TD
     G1 -->|✅ Valid PDF| G2{Guardrail 2\nLLM-judgment\nNotes injection check}
 
     G2 -->|❌ Manipulation attempt\n'ignore vendor check'\n'force approve'| GFail2([Rejected\nnotes blocked])
-    G2 -->|✅ Legitimate business\ncontext or no notes| Triage
+    G2 -->|✅ Legitimate context\nor no notes| Triage
 
     G3 -->|❌ Out of scope\ncooking · travel · unrelated| GFail3([Rejected\nout of AP scope])
     G3 -->|✅ AP-related query| Triage
 
     Triage[Triage Agent\nentry point + query handler]
 
-    Triage --> Extract[Extraction Agent\nLLMWhisperer OCR]
+    Triage -->|💬 Chat query\nno PDF path| ChatTools[invoice_query tool\nvendor_history_context tool]
+    ChatTools --> ChatReply([✅ Synthesized answer\nreturned directly])
+
+    Triage -->|📄 PDF path detected\nhand off| Extract
+
+    Extract[Extraction Agent\nLLMWhisperer OCR]
 
     Extract --> OCRCheck{Readable?\nStandard AP invoice?}
 
@@ -62,6 +67,8 @@ flowchart TD
     style StopA fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
     style StopB fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
     style OGFail fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
+    style ChatReply fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style ChatTools fill:#f0fdf4,stroke:#16a34a,color:#14532d
     style Approve fill:#dcfce7,stroke:#16a34a,color:#14532d
     style DB1 fill:#dcfce7,stroke:#16a34a,color:#14532d
     style DB2 fill:#fef9c3,stroke:#ca8a04,color:#713f12

@@ -282,6 +282,82 @@ INVOICES = [
 ]
 
 
+VIDEO_INVOICES = [
+    {
+        "filename": "video_invoice_A_summit_consulting.pdf",
+        "description": "Video demo A — Summit Consulting, strategy engagement, exact PO match",
+        "vendor_name": "Summit Consulting Group",
+        "vendor_address": "321 Executive Way, New York, NY 10001",
+        "vendor_tax_id": "45-6789012",
+        "bill_to": "Executive Department\nYour Company Inc.\n500 Corporate Plaza\nNew York, NY 10001",
+        "invoice_number": "SCG-2024-0781",
+        "invoice_date": "2024-03-12",
+        "due_date": "2024-05-11",
+        "payment_terms": "Net 60",
+        "po_number": "PO-2024-015",
+        "line_items": [
+            {"description": "Strategy Consulting - Phase 1 (40 hrs @ $350/hr)", "qty": 40, "unit_price": 350.00, "amount": 14000.00},
+            {"description": "Market Analysis Report", "qty": 1, "unit_price": 8000.00, "amount": 8000.00},
+            {"description": "Workshop Facilitation (2 days)", "qty": 2, "unit_price": 1500.00, "amount": 3000.00},
+        ],
+        "subtotal": 25000.00,
+        "tax_rate": 0,
+        "tax_amount": 0.00,
+        "total_amount": 25000.00,
+        "bank_account": "ACC-004-6789",
+        "notes": "Deliverables: Phase 1 strategy deck, market analysis PDF, and workshop summary report delivered on March 10, 2024.",
+    },
+    {
+        "filename": "video_invoice_B_pacific_printing.pdf",
+        "description": "Video demo B — Pacific Printing, marketing collateral, exact PO match",
+        "vendor_name": "Pacific Printing Co.",
+        "vendor_address": "654 Industrial Ave, Seattle, WA 98101",
+        "vendor_tax_id": "56-7890123",
+        "bill_to": "Marketing Department\nYour Company Inc.\n500 Corporate Plaza\nNew York, NY 10001",
+        "invoice_number": "PPC-2024-0334",
+        "invoice_date": "2024-03-14",
+        "due_date": "2024-04-13",
+        "payment_terms": "Net 30",
+        "po_number": "PO-2024-020",
+        "line_items": [
+            {"description": "Annual Report Printing - 500 copies", "qty": 500, "unit_price": 5.50, "amount": 2750.00},
+            {"description": "Marketing Brochures - 1000 copies", "qty": 1000, "unit_price": 0.80, "amount": 800.00},
+            {"description": "Design & Prepress Services", "qty": 1, "unit_price": 250.00, "amount": 250.00},
+        ],
+        "subtotal": 3800.00,
+        "tax_rate": 0,
+        "tax_amount": 0.00,
+        "total_amount": 3800.00,
+        "bank_account": "ACC-005-0123",
+        "notes": "All print files proofed and approved by Rachel Kim (Marketing) on March 8, 2024. Delivery completed March 13.",
+    },
+    {
+        "filename": "video_invoice_C_midwest_data.pdf",
+        "description": "Video demo C — Midwest Data Systems, IT services, within variance",
+        "vendor_name": "Midwest Data Systems",
+        "vendor_address": "147 Data Center Dr, Columbus, OH 43201",
+        "vendor_tax_id": "78-9012345",
+        "bill_to": "IT Department\nYour Company Inc.\n500 Corporate Plaza\nNew York, NY 10001",
+        "invoice_number": "MDS-2024-0512",
+        "invoice_date": "2024-03-15",
+        "due_date": "2024-04-29",
+        "payment_terms": "Net 45",
+        "po_number": "PO-2024-030",
+        "line_items": [
+            {"description": "Cloud Backup Service - Annual License", "qty": 1, "unit_price": 4500.00, "amount": 4500.00},
+            {"description": "IT Support Contract - Q1 (Jan-Mar 2024)", "qty": 1, "unit_price": 2500.00, "amount": 2500.00},
+            {"description": "Software License Renewal (5 seats)", "qty": 5, "unit_price": 280.00, "amount": 1400.00},
+        ],
+        "subtotal": 8400.00,
+        "tax_rate": 0,
+        "tax_amount": 0.00,
+        "total_amount": 8400.00,
+        "bank_account": "ACC-007-8901",
+        "notes": "License keys delivered digitally. Support contract SLA: 4-hour response. Renewal confirmation ref: MDS-R-2024-030.",
+    },
+]
+
+
 def generate_all():
     print(f"Generating {len(INVOICES)} sample invoices in: {OUTPUT_DIR}")
     for inv in INVOICES:
@@ -291,6 +367,16 @@ def generate_all():
         out_path = OUTPUT_DIR / inv["filename"]
         pdf.output(str(out_path))
         print(f"  ✅ {inv['filename']} — {inv['description']}")
+
+    print(f"\nGenerating {len(VIDEO_INVOICES)} video demo invoices...")
+    for inv in VIDEO_INVOICES:
+        pdf = InvoicePDF()
+        pdf.set_auto_page_break(auto=True, margin=20)
+        pdf.draw_invoice(inv)
+        out_path = OUTPUT_DIR / inv["filename"]
+        pdf.output(str(out_path))
+        print(f"  ✅ {inv['filename']} — {inv['description']}")
+
     print("Done!")
 
 
